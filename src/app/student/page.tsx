@@ -24,8 +24,8 @@ export default function StudentPage() {
   const [loading, setLoading] = useState(false);
 
   const leaveRoom = () => {
-    localStorage.removeItem("cosmic-session-token");
-    localStorage.removeItem("cosmic-room-code");
+    sessionStorage.removeItem("cosmic-session-token");
+    sessionStorage.removeItem("cosmic-room-code");
     setRoom(null);
     setMe(null);
     setStudents([]);
@@ -37,8 +37,8 @@ export default function StudentPage() {
 
   // Restore session
   useEffect(() => {
-    const token = localStorage.getItem("cosmic-session-token");
-    const savedCode = localStorage.getItem("cosmic-room-code");
+    const token = sessionStorage.getItem("cosmic-session-token");
+    const savedCode = sessionStorage.getItem("cosmic-room-code");
     if (token && savedCode) {
       rejoin(savedCode, token);
     }
@@ -87,7 +87,7 @@ export default function StudentPage() {
         }
         setRoomClosed(false);
         // My group mates
-        const token = localStorage.getItem("cosmic-session-token");
+        const token = sessionStorage.getItem("cosmic-session-token");
         const mine = (data as RoomStudent[]).find((s) => s.session_token === token);
         if (mine) {
           setMe(mine);
@@ -161,8 +161,8 @@ export default function StudentPage() {
         .select()
         .single();
       if (jErr) throw jErr;
-      localStorage.setItem("cosmic-session-token", token);
-      localStorage.setItem("cosmic-room-code", r.room_code);
+      sessionStorage.setItem("cosmic-session-token", token);
+      sessionStorage.setItem("cosmic-room-code", r.room_code);
       setRoom(r);
       setMe(created as RoomStudent);
     } catch (e) {
