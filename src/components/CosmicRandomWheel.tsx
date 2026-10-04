@@ -79,7 +79,7 @@ export default function CosmicRandomWheel({ names, highlightNames = [], spinning
         animate={{ rotate: rotation }}
         transition={spinning ? { duration: 3.5, ease: [0.15, 0.9, 0.25, 1] } : { duration: 0.3 }}
       >
-        <svg viewBox="0 0 400 400" className="w-full h-full drop-shadow-[0_0_25px_rgba(139,92,246,0.35)]">
+        <svg viewBox="-14 -14 428 428" className="w-full h-full drop-shadow-[0_0_25px_rgba(139,92,246,0.35)]">
           {/* Rim bulbs */}
           {bulbs.map(([x, y], i) => (
             <circle key={i} cx={x} cy={y} r={4} fill={i % 2 === 0 ? "#FFD166" : "#00F5D4"} opacity={0.9} />
@@ -104,9 +104,9 @@ export default function CosmicRandomWheel({ names, highlightNames = [], spinning
           {names.map((n, i) => {
             const mid = i * step + step / 2;
             const [tx, ty] = polar(mid, R * 0.62);
-            // กลับหัวข้อความฝั่งซ้ายให้อ่านง่าย
+            // ข้อความวางตามแนวรัศมี (อ่านจากในออกนอก) ฝั่งซ้ายกลับหัวให้อ่านง่าย
             const flip = mid > 90 && mid < 270;
-            const textAngle = flip ? mid + 180 : mid;
+            const textAngle = flip ? mid + 90 : mid - 90;
             return (
               <text
                 key={`t-${n}-${i}`}
