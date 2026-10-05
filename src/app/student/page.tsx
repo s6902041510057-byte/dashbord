@@ -22,6 +22,8 @@ export default function StudentPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [wheelDone, setWheelDone] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showRespondentPopup, setShowRespondentPopup] = useState(false);
+  const [currentRespondentId, setCurrentRespondentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -114,6 +116,32 @@ export default function StudentPage() {
       supabase.removeChannel(ch);
     };
   }, [room?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ตรวจสอบว่าตัวเองได้รับเลือกเป็นผู้ตอบข้อปัจจุบันหรือไม่ → เปิด popup
+  useEffect(() => {
+    if (!room || room.status !== "QUIZ_ACTIVE" || !me?.group_id) return;
+    const check = async () => {
+      const { data } = await supabase
+        .from("respondent_selections")
+        .select("student_id")
+        .eq("group_id", me.group_id)
+        .eq("question_index", room.current_question_index)
+        .limit(1);
+      const respId = (data?.[0] as { student_id: string } | undefined)?.student_id ?? null;
+      setCurrentRespondentId(respId);
+      if (respId === me.id) {
+        setShowRespondentPopup(true);
+      }
+    };
+    check();
+    const ch = supabase
+      .channel(`student-respondent-${room.id}-${me.group_id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "respondent_selections", filter: `group_id=eq.${me.group_id}` }, check)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [room?.id, room?.status, room?.current_question_index, me?.group_id, me?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Questions of this room's quiz (realtime: teacher adds/edits live)
   useEffect(() => {
@@ -292,6 +320,23 @@ export default function StudentPage() {
               onNameChange={(n) => setMyGroup({ ...myGroup, name: n })}
             />
           )}
+        </div>
+      )}
+
+      {/* Popup แจ้งเตือนเมื่อได้รับเลือกเป็นผู้ตอบ */}
+      {showRespondentPopup && currentRespondentId === me?.id && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="glass-panel rounded-2xl p-8 max-w-sm w-full mx-4 text-center border-cosmic-gold/50">
+            <p className="text-5xl mb-3">🎯</p>
+            <p className="text-2xl font-extrabold text-cosmic-gold mb-2">คุณได้รับเลือกเป็นผู้ตอบ!</p>
+            <p className="text-sm text-slate-400 mb-6">เตรียมตอบคำถามข้อ {room.current_question_index + 1} ให้พร้อม</p>
+            <button
+              onClick={() => setShowRespondentPopup(false)}
+              className="w-full px-6 py-3 rounded-xl bg-cosmic-gold/20 hover:bg-cosmic-gold/30 border border-cosmic-gold/40 font-bold"
+            >
+              รับทราบ
+            </button>
+          </div>
         </div>
       )}
 

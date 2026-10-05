@@ -19,6 +19,8 @@ export default function RoomDetailPage({ params }: { params: { id: string } }) {
   const [answers, setAnswers] = useState<Record<string, { selected_option: number; is_correct: boolean; points_earned: number }>>({});
   const [respondents, setRespondents] = useState<Record<string, string>>({});
   const [nextRespondents, setNextRespondents] = useState<Record<string, string>>({});
+  const [editingGroupSize, setEditingGroupSize] = useState(false);
+  const [newGroupSize, setNewGroupSize] = useState(4);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
@@ -215,6 +217,48 @@ export default function RoomDetailPage({ params }: { params: { id: string } }) {
     await setStatus("LOBBY");
   };
 
+  // ครูสุ่มผู้ตอบให้กลุ่ม (แทนหัวหน้าเลือกเอง)
+  const randomizeRespondent = async (groupId: string, questionIndex: number) => {
+    const members = students.filter((s) => s.group_id === groupId);
+    if (members.length === 0) return;
+    const pick = members[Math.floor(Math.random() * members.length)];
+    await supabase.from("respondent_selections").upsert(
+      { group_id: groupId, question_index: questionIndex, student_id: pick.id },
+      { onConflict: "group_id,question_index" }
+    );
+  };
+
+  // ครูแก้ไขจำนวนสมาชิกต่อกลุ่ม → สุ่มกลุ่มใหม่
+  const updateGroupSize = async () => {
+    const size = Math.max(2, Math.min(8, newGroupSize));
+    setLoading(true);
+    setError(null);
+    try {
+      await supabase.from("groups").delete().eq("room_id", id);
+      const chunks = assignGroups(students, size);
+      const { data: created, error: gErr } = await supabase
+        .from("groups")
+        .insert(chunks.map((_, i) => ({ room_id: id, name: `กลุ่มที่ ${i + 1}` })))
+        .select();
+      if (gErr) throw gErr;
+      for (let gi = 0; gi < chunks.length; gi++) {
+        const gid = (created as Group[])[gi].id;
+        for (const s of chunks[gi]) {
+          await supabase.from("room_students").update({ group_id: gid }).eq("id", s.id);
+        }
+      }
+      await supabase.from("rooms").update({ max_group_size: size }).eq("id", id);
+      await loadGroups();
+      await loadStudents();
+      await loadRoom();
+      setEditingGroupSize(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "แก้ไขกลุ่มไม่สำเร็จ");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!authed) {
     return (
       <div className="min-h-screen">
@@ -262,7 +306,7 @@ export default function RoomDetailPage({ params }: { params: { id: string } }) {
                 }
                 title={
                   room.current_question_index > 0 && groups.some((g) => !respondents[g.id])
-                    ? "รอทุกกลุ่มเลือกผู้ตอบข้อปัจจุบันก่อน"
+                    ? "รอครูสุ่มผู้ตอบข้อปัจจุบันก่อน"
                     : "ไปข้อถัดไป"
                 }
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm disabled:opacity-50"
@@ -273,6 +317,14 @@ export default function RoomDetailPage({ params }: { params: { id: string } }) {
                 <Square className="w-4 h-4" /> จบเกม
               </button>
             </>
+          )}
+          {room.status !== "CLOSED" && (
+            <button
+              onClick={() => { setNewGroupSize(room.max_group_size ?? 4); setEditingGroupSize(true); }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm"
+            >
+              <Users className="w-4 h-4" /> แก้ไขจำนวนสมาชิกกลุ่ม
+            </button>
           )}
           {room.status === "CLOSED" ? (
             <button onClick={reopenRoom} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cosmic-cyan/20 border border-cosmic-cyan/40 text-sm font-medium">
@@ -342,21 +394,74 @@ export default function RoomDetailPage({ params }: { params: { id: string } }) {
             {[...groups].sort((a, b) => b.score - a.score).map((g, i) => {
               const members = students.filter((s) => s.group_id === g.id);
               const leader = members.find((m) => m.id === g.leader_student_id);
+              const respName = students.find((s) => s.id === respondents[g.id])?.student_name;
               return (
                 <div key={g.id} className="rounded-xl p-4 bg-white/[0.03] border border-white/10">
                   <p className="font-bold">{i === 0 ? "🥇 " : ""}{g.name} <span className="text-cosmic-gold">• {g.score} คะแนน</span></p>
                   <p className="text-xs text-slate-400 mt-1">หัวหน้า: {leader?.student_name ?? "รอโหวต..."}</p>
+                  {room.status === "QUIZ_ACTIVE" && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      ผู้ตอบข้อ {room.current_question_index + 1}: <span className="text-cosmic-cyan font-medium">{respName ?? "ยังไม่ได้สุ่ม"}</span>
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {members.map((m) => (
                       <span key={m.id} className="text-xs px-2 py-1 rounded-full bg-white/5 border border-white/10">{m.student_name}</span>
                     ))}
                   </div>
+                  {room.status === "QUIZ_ACTIVE" && (
+                    <button
+                      onClick={() => randomizeRespondent(g.id, room.current_question_index)}
+                      className="mt-3 w-full text-xs px-3 py-2 rounded-lg bg-cosmic-violet/20 border border-cosmic-violet/40 hover:bg-cosmic-violet/30 font-medium"
+                    >
+                      🎲 สุ่มผู้ตอบข้อนี้
+                    </button>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Modal แก้ไขจำนวนสมาชิกกลุ่ม */}
+      {editingGroupSize && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="glass-panel rounded-2xl p-8 max-w-sm w-full mx-4 text-center border-cosmic-cyan/40">
+            <p className="text-2xl font-extrabold text-cosmic-cyan mb-2">แก้ไขจำนวนสมาชิกกลุ่ม</p>
+            <p className="text-sm text-slate-400 mb-4">
+              ตอนนี้มี {students.length} คน กลุ่มละ {room.max_group_size} คน = {groups.length} กลุ่ม
+            </p>
+            <label className="text-sm text-slate-300">กลุ่มละกี่คน?</label>
+            <input
+              type="number"
+              min={2}
+              max={8}
+              value={newGroupSize}
+              onChange={(e) => setNewGroupSize(Number(e.target.value))}
+              className="mt-2 w-24 px-3 py-2 rounded-lg bg-cosmic-void border border-white/10 text-center text-xl font-bold text-cosmic-gold"
+            />
+            <p className="text-xs text-slate-500 mt-2">
+              จะได้ {Math.ceil(students.length / Math.max(2, newGroupSize))} กลุ่ม
+            </p>
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setEditingGroupSize(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={updateGroupSize}
+                disabled={loading}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-cosmic-cyan/20 border border-cosmic-cyan/40 text-sm font-bold disabled:opacity-50"
+              >
+                บันทึก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Questions in this room */}
       <div>
