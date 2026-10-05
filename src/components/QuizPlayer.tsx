@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { CheckCircle2, XCircle, Timer, Crown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { calculatePoints } from "@/lib/game-logic";
+import { calculatePoints, groupHandicapMultiplier } from "@/lib/game-logic";
 import type { Room, RoomStudent, Group, Question } from "@/types/quiz";
 
 interface AnswerRow {
@@ -163,13 +163,15 @@ export default function QuizPlayer({ room, group, me, members, questions, onGrou
       const timeTaken = currentQ.time_limit_sec - timeLeft;
       const isCorrect = optIdx === currentQ.correct_option;
       // ตอบถูกเร็วได้โบนัสเพิ่มสูงสุด 30% ของคะแนนข้อ (ยิ่งเหลือเวลาเยอะยิ่งได้เยอะ)
-      const points = calculatePoints({
+      const speedTotal = calculatePoints({
         isCorrect,
         basePoints: currentQ.points,
         timeTakenSec: timeTaken,
         timeLimitSec: currentQ.time_limit_sec,
         speedBonusMax: Math.max(10, Math.round(currentQ.points * 0.3)),
       });
+      // ชดเชยกลุ่มเล็ก: สมาชิกน้อยกว่าเกณฑ์ได้แต้มคูณเพิ่มเล็กน้อย
+      const points = Math.round(speedTotal * groupHandicapMultiplier(members.length, room.max_group_size));
       const { error: insErr } = await supabase.from("submitted_answers").insert({
         room_id: room.id,
         group_id: group.id,
@@ -261,7 +263,17 @@ export default function QuizPlayer({ room, group, me, members, questions, onGrou
               <>
                 <p className="text-2xl font-extrabold text-cosmic-cyan flex items-center justify-center gap-2"><CheckCircle2 className="w-7 h-7" /> ถูกต้อง! +{answer.points_earned} 🎉</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  ฐาน {currentQ.points} + โบนัสความเร็ว {answer.points_earned - currentQ.points}
+                  {(() => {
+                    const speedTotal = calculatePoints({
+                      isCorrect: true,
+                      basePoints: currentQ.points,
+                      timeTakenSec: Number(answer.time_taken_sec),
+                      timeLimitSec: currentQ.time_limit_sec,
+                      speedBonusMax: Math.max(10, Math.round(currentQ.points * 0.3)),
+                    });
+                    const handicap = answer.points_earned - speedTotal;
+                    return `ฐาน ${currentQ.points} + โบนัสความเร็ว ${speedTotal - currentQ.points}${handicap > 0 ? ` + ชดเชยกลุ่มเล็ก ${handicap}` : ""}`;
+                  })()}
                 </p>
               </>
             ) : (

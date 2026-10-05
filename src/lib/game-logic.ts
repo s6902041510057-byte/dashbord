@@ -15,8 +15,10 @@ export function shuffleArray<T>(input: T[], randomFn: () => number = Math.random
 }
 
 /**
- * Random grouping: shuffle students then chunk into groups of maxGroupSize.
- * Last group merges if it would contain only 1 student and total > maxGroupSize.
+ * Balanced grouping: chunk shuffled students into groups of maxGroupSize.
+ * The last group may be smaller (never merged upward), so no group
+ * ever exceeds maxGroupSize. Sizes differ by at most 1.
+ * Example: 3 students, size 2 -> [2, 1]. 7 students, size 3 -> [3, 2, 2].
  */
 export function assignGroups<T extends { id: string }>(
   students: T[],
@@ -26,16 +28,27 @@ export function assignGroups<T extends { id: string }>(
   if (maxGroupSize < 2) throw new Error("maxGroupSize must be >= 2");
   if (students.length === 0) return [];
   const shuffled = shuffleArray(students, randomFn);
+  const numGroups = Math.ceil(shuffled.length / maxGroupSize);
+  const base = Math.floor(shuffled.length / numGroups);
+  const remainder = shuffled.length % numGroups;
   const groups: T[][] = [];
-  for (let i = 0; i < shuffled.length; i += maxGroupSize) {
-    groups.push(shuffled.slice(i, i + maxGroupSize));
-  }
-  // Avoid lone-wolf group: merge last group of 1 into previous group
-  if (groups.length > 1 && groups[groups.length - 1].length === 1) {
-    const lone = groups.pop() as T[];
-    groups[groups.length - 1].push(...lone);
+  let cursor = 0;
+  for (let g = 0; g < numGroups; g++) {
+    const size = base + (g < remainder ? 1 : 0);
+    groups.push(shuffled.slice(cursor, cursor + size));
+    cursor += size;
   }
   return groups;
+}
+
+/**
+ * Fairness handicap: groups smaller than maxGroupSize get slightly more
+ * points per correct answer (+10% per missing member).
+ * Full-size groups get no bonus (multiplier 1).
+ */
+export function groupHandicapMultiplier(memberCount: number, maxGroupSize: number): number {
+  if (memberCount >= maxGroupSize) return 1;
+  return 1 + 0.1 * (maxGroupSize - memberCount);
 }
 
 export type VoteMap = Record<string, string>; // voterStudentId -> votedStudentId
