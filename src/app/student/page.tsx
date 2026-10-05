@@ -20,6 +20,8 @@ export default function StudentPage() {
   const [myGroup, setMyGroup] = useState<Group | null>(null);
   const [roomClosed, setRoomClosed] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [wheelDone, setWheelDone] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -259,8 +261,17 @@ export default function StudentPage() {
 
       {room.status === "GROUPING" && (
         <div className="space-y-6">
-          <CosmicRandomWheel names={students.map((s) => s.student_name)} highlightNames={myGroupMates} spinning />
-          {myGroupMates.length > 0 ? (
+          {!wheelDone ? (
+            <CosmicRandomWheel
+              names={students.map((s) => s.student_name)}
+              highlightNames={myGroupMates}
+              spinning
+              onDone={() => {
+                setWheelDone(true);
+                setShowGroupModal(true);
+              }}
+            />
+          ) : (
             <div className="glass-panel rounded-2xl p-6 text-center border-cosmic-cyan/40">
               <p className="text-sm text-slate-400">คุณอยู่กลุ่มนี้ 👇</p>
               <div className="flex flex-wrap justify-center gap-2 mt-3">
@@ -269,8 +280,6 @@ export default function StudentPage() {
                 ))}
               </div>
             </div>
-          ) : (
-            <p className="text-center text-sm text-slate-400">กำลังวาร์ปเข้ากลุ่มของคุณ...</p>
           )}
           {me?.group_id && myGroupMembers.length > 0 && myGroup && me && (
             <GroupSetup
@@ -283,6 +292,28 @@ export default function StudentPage() {
               onNameChange={(n) => setMyGroup({ ...myGroup, name: n })}
             />
           )}
+        </div>
+      )}
+
+      {/* Modal แสดงสมาชิกกลุ่มหลังวงล้อหมุนเสร็จ */}
+      {showGroupModal && myGroupMates.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="glass-panel rounded-2xl p-8 max-w-sm w-full mx-4 text-center border-cosmic-cyan/40">
+            <p className="text-2xl font-extrabold text-cosmic-cyan mb-2">🎉 ในกลุ่มเรามีใครบ้าง</p>
+            <div className="flex flex-wrap justify-center gap-2 mt-4">
+              {myGroupMates.map((n) => (
+                <span key={n} className="px-4 py-2 rounded-full bg-cosmic-violet/20 border border-cosmic-violet/50 font-medium text-lg">
+                  {n}
+                </span>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowGroupModal(false)}
+              className="mt-6 w-full px-6 py-3 rounded-xl bg-cosmic-cyan/20 hover:bg-cosmic-cyan/30 border border-cosmic-cyan/40 font-bold"
+            >
+              ตกลง
+            </button>
+          </div>
         </div>
       )}
 
