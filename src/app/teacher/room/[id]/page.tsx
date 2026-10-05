@@ -256,8 +256,15 @@ export default function RoomDetailPage({ params }: { params: { id: string } }) {
             <>
               <button
                 onClick={nextQuestion}
-                disabled={groups.length === 0 || groups.some((g) => !nextRespondents[g.id])}
-                title={groups.some((g) => !nextRespondents[g.id]) ? "รอทุกกลุ่มเลือกผู้ตอบข้อถัดไปก่อน" : "ไปข้อถัดไป"}
+                disabled={
+                  groups.length === 0 ||
+                  (room.current_question_index > 0 && groups.some((g) => !respondents[g.id]))
+                }
+                title={
+                  room.current_question_index > 0 && groups.some((g) => !respondents[g.id])
+                    ? "รอทุกกลุ่มเลือกผู้ตอบข้อปัจจุบันก่อน"
+                    : "ไปข้อถัดไป"
+                }
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm disabled:opacity-50"
               >
                 <SkipForward className="w-4 h-4" /> ข้อถัดไป ({room.current_question_index + 1}/{questions.length})
